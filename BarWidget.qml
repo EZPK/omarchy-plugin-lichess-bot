@@ -42,12 +42,33 @@ BarWidget {
     JsonAdapter {
       id: persisted
       property string apiToken: ""
-      property string mode: "ai" // "ai" | "human"
+      property string mode: "ai" // "ai" | "casual" | "rated"
       property int level: 3
       property string color: "random"
       property string clockPreset: "unlimited"
-      property int rating: 1500 // used for "human" mode's rating range
     }
+  }
+
+  // Populated from GET /api/account (piggybacked on token validation,
+  // see TokenCheck below) — the account's real per-speed ratings, used
+  // to compute the seek's rating range automatically instead of asking
+  // for a manually-typed Elo. Confirmed shape against Perfs.yaml/Perf.yaml:
+  // { bullet: {rating, games, ...}, blitz: {...}, rapid: {...}, ... }.
+  property var accountPerfs: ({})
+
+  function perfKeyForClockPreset(preset) {
+    switch (preset) {
+      case "bullet": return "bullet"
+      case "blitz": return "blitz"
+      case "rapid": return "rapid"
+      case "correspondence": return "correspondence"
+      default: return "rapid"
+    }
+  }
+
+  function currentRating() {
+    var perf = accountPerfs[perfKeyForClockPreset(persisted.clockPreset)]
+    return (perf && typeof perf.rating === "number") ? perf.rating : 1500
   }
 
   // The field shows/edits draftToken as you type; persisted.apiToken (the
@@ -61,7 +82,6 @@ BarWidget {
   readonly property int settingsLevel: persisted.level
   readonly property string settingsColor: persisted.color
   readonly property string settingsClockPreset: persisted.clockPreset
-  readonly property int settingsRating: persisted.rating
   readonly property string lastError: _lastError
 
   property string _lastError: ""
@@ -80,23 +100,31 @@ BarWidget {
   }
 
   function setMode(v) {
+    var wasHuman = persisted.mode === "casual" || persisted.mode === "rated"
+    var isHuman = v === "casual" || v === "rated"
     persisted.mode = v
-    // "unlimited" isn't offered in the Cadence list once in "human" mode
-    // (the seek endpoint has no untimed option) — if that was the
-    // saved value, land on a real one instead of keeping an option the
-    // dropdown no longer shows.
-    if (v === "human" && persisted.clockPreset === "unlimited") persisted.clockPreset = "blitz"
+    // The seek endpoint (mode "casual"/"rated") only accepts Rapid,
+    // Classical or Correspondence — confirmed empirically: Bullet and
+    // Blitz both fail with "Invalid time control" even in an otherwise
+    // minimal request. "Illimitée" isn't valid there either (no untimed
+    // option). Landing on a mode-appropriate cadence here means the
+    // Cadence dropdown (which hides the now-invalid options per mode)
+    // never has to display a stale value that isn't in its own list.
+    if (isHuman && !wasHuman) {
+      var okForHuman = persisted.clockPreset === "rapid" || persisted.clockPreset === "correspondence"
+      if (!okForHuman) persisted.clockPreset = "rapid"
+    }
   }
 
   function setLevel(v) { persisted.level = Math.max(1, Math.min(8, Math.round(v))) }
   function setColor(v) { persisted.color = v }
   function setClockPreset(v) { persisted.clockPreset = v }
-  function setRating(v) { persisted.rating = Math.max(400, Math.min(3000, Math.round(v))) }
 
   function openTokenPage() {
-    // board:play is only needed for "human" mode (POST /api/board/seek +
-    // the account event stream), but requesting it unconditionally means
-    // switching modes later never requires generating a second token.
+    // board:play is only needed for "casual"/"rated" modes (POST
+    // /api/board/seek + the account event stream), but requesting it
+    // unconditionally means switching modes later never requires
+    // generating a second token.
     var url = "https://lichess.org/account/oauth/token/create" +
       "?description=" + encodeURIComponent("Omarchy Lichess Bot plugin") +
       "&scopes[]=challenge:write&scopes[]=board:play"
@@ -143,6 +171,7 @@ BarWidget {
       if (status === 200 && json && json.username) {
         root.tokenStatus = "valid"
         root.tokenStatusDetail = json.username
+        root.accountPerfs = json.perfs || {}
         persisted.apiToken = checkedToken
       } else {
         root.tokenStatus = "invalid"
@@ -170,19 +199,23 @@ BarWidget {
       "color=" + encodeURIComponent(persisted.color)
     ]
 
-    if (persisted.mode === "human") {
-      // /api/board/seek's "time" is in *minutes* (unlike the AI
-      // endpoint's clock.limit, which is seconds) — and it has no
-      // untimed option, so "unlimited" falls back to blitz for seeks.
+    if (persisted.mode === "casual" || persisted.mode === "rated") {
+      parts.push("rated=" + (persisted.mode === "rated" ? "true" : "false"))
+      // Confirmed empirically against the live API: /api/board/seek
+      // rejects Bullet and Blitz outright ("Invalid time control", even
+      // with an otherwise-minimal request) — only Rapid and
+      // Correspondence work. setMode() already steers the persisted
+      // cadence away from the other options when switching into these
+      // modes, so this default only matters for a value that somehow
+      // still isn't one of the two (belt and suspenders).
+      var rating = root.currentRating()
       var spread = 150
-      parts.push("ratingMin=" + Math.max(0, persisted.rating - spread))
-      parts.push("ratingMax=" + (persisted.rating + spread))
-      var seekPreset = persisted.clockPreset === "unlimited" ? "blitz" : persisted.clockPreset
-      switch (seekPreset) {
-        case "bullet": parts.push("time=1", "increment=0"); break
-        case "rapid": parts.push("time=10", "increment=5"); break
-        case "correspondence": parts.push("days=2"); break
-        default: parts.push("time=5", "increment=3"); break // "blitz"
+      parts.push("ratingMin=" + Math.max(0, rating - spread))
+      parts.push("ratingMax=" + (rating + spread))
+      if (persisted.clockPreset === "correspondence") {
+        parts.push("days=2")
+      } else {
+        parts.push("time=10", "increment=5") // "rapid"
       }
     } else {
       parts.push("level=" + encodeURIComponent(persisted.level))

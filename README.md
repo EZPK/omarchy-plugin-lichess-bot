@@ -1,10 +1,11 @@
 # Omarchy Lichess Bot
 
 Un lanceur de partie Lichess depuis la barre Omarchy : contre le bot
-(niveaux 1-8) ou contre un joueur humain de ton niveau. Choisis
-l'adversaire, la couleur et la cadence dans le popup, puis clique
-"Nouvelle partie" — une petite fenêtre dédiée crée la partie (ou
-recherche un adversaire) et t'emmène directement dessus sur lichess.org.
+(niveaux 1-8), contre un joueur humain de ton niveau en partie non
+classée, ou en partie classée. Choisis l'adversaire, la couleur et la
+cadence dans le popup, puis clique "Nouvelle partie" — une petite
+fenêtre dédiée crée la partie (ou recherche un adversaire) et t'emmène
+directement dessus sur lichess.org.
 
 ## Pourquoi pas un échiquier intégré au shell ?
 
@@ -24,17 +25,24 @@ cross-origin depuis la petite page locale (`webapp/launch.html`) vers
 "app" du navigateur (sans barre d'adresse ni onglets), qui crée la partie
 puis redirige directement dessus.
 
-## Deux modes
+## Trois modes
 
-- **Bot Lichess** : niveau 1-8, couleur, cadence. Crée la partie
-  immédiatement (`POST /api/challenge/ai`).
-- **Joueur, même niveau** : renseigne ton classement Elo approximatif ;
-  le plugin cherche un adversaire non classé dans ±150 points autour
-  (`POST /api/board/seek`). La recherche reste ouverte dans la fenêtre
-  jusqu'à trouver quelqu'un (abandon au bout de 5 minutes) — Lichess
-  n'indique pas directement la partie créée par cet appel, la page
-  surveille donc en parallèle le flux d'évènements du compte
-  (`GET /api/stream/event`) pour détecter le début de partie.
+- **Bot Lichess** : niveau 1-8, couleur, cadence (Illimitée, Bullet,
+  Blitz, Rapide ou Correspondance). Crée la partie immédiatement
+  (`POST /api/challenge/ai`).
+- **Joueur, non classé** et **Joueur, classé** : recherche un adversaire
+  humain dans ±150 points autour de ton classement réel (récupéré
+  automatiquement via `GET /api/account`, par cadence — pas besoin de le
+  saisir) via `POST /api/board/seek`, avec `rated` réglé en conséquence.
+  La recherche reste ouverte dans la fenêtre jusqu'à trouver quelqu'un
+  (abandon au bout de 5 minutes) — Lichess n'indique pas directement la
+  partie créée par cet appel, la page surveille donc en parallèle le
+  flux d'évènements du compte (`GET /api/stream/event`) pour détecter le
+  début de partie. **Seules les cadences Rapide et Correspondance sont
+  disponibles pour ces deux modes** : confirmé empiriquement contre
+  l'API en direct, `/api/board/seek` rejette Bullet et Blitz avec une
+  erreur "Invalid time control", y compris sur une requête par ailleurs
+  minimale — ce n'est pas une limite imposée par ce plugin.
 
 ## Prérequis
 
@@ -87,8 +95,10 @@ Ou supprime directement `~/.config/omarchy/plugins/lichess-bot`.
 
 ## Limites
 
-- La recherche d'adversaire humain est toujours en partie non classée
-  (`rated: false`) — pas d'impact sur le classement de personne.
+- Le mode "Joueur, classé" affecte ton classement Lichess réel — Lichess
+  peut aussi refuser l'appariement classé pour un compte trop récent ou
+  trop peu actif dans la cadence choisie ; l'erreur renvoyée par l'API
+  s'affiche directement dans la fenêtre.
 - La partie se joue sur lichess.org, dans la fenêtre ouverte par le
   plugin — pas d'échiquier intégré à la barre.
 

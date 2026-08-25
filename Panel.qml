@@ -90,7 +90,8 @@ Panel {
             width: parent.width
             options: [
               { value: "ai", label: "Bot Lichess" },
-              { value: "human", label: "Joueur, même niveau" }
+              { value: "casual", label: "Joueur, non classé" },
+              { value: "rated", label: "Joueur, classé" }
             ]
             value: root.hostWidget ? root.hostWidget.settingsMode : "ai"
             foreground: root.foreground
@@ -108,22 +109,34 @@ Panel {
           onModified: function(v) { if (root.hostWidget) root.hostWidget.setLevel(v) }
         }
 
-        NumberField {
-          visible: root.hostWidget && root.hostWidget.settingsMode === "human"
-          label: "Ton classement Elo approximatif"
-          from: 400
-          to: 3000
-          stepSize: 25
-          value: root.hostWidget ? root.hostWidget.settingsRating : 1500
-          foreground: root.foreground
-          onModified: function(v) { if (root.hostWidget) root.hostWidget.setRating(v) }
+        Text {
+          visible: root.hostWidget && root.hostWidget.settingsMode !== "ai"
+          width: parent.width
+          wrapMode: Text.WordWrap
+          text: root.hostWidget
+            ? "Ton classement (" + (root.hostWidget.settingsClockPreset === "correspondence" ? "correspondance" : "rapide") +
+              ") : " + root.hostWidget.currentRating() + " — recherche ±150"
+            : ""
+          color: Qt.darker(root.foreground, 1.4)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
         }
 
         Text {
-          visible: root.hostWidget && root.hostWidget.settingsMode === "human"
+          visible: root.hostWidget && root.hostWidget.settingsMode === "rated"
           width: parent.width
           wrapMode: Text.WordWrap
-          text: "Cherche un adversaire non classé dans ±150 points autour de ce classement. Nécessite le scope board:play sur le token."
+          text: "Partie classée : affecte ton classement Lichess réel. Nécessite le scope board:play sur le token."
+          color: Qt.darker(root.foreground, 1.4)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+        }
+
+        Text {
+          visible: root.hostWidget && root.hostWidget.settingsMode === "casual"
+          width: parent.width
+          wrapMode: Text.WordWrap
+          text: "Partie non classée : aucun impact sur ton classement. Nécessite le scope board:play sur le token."
           color: Qt.darker(root.foreground, 1.4)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -155,14 +168,14 @@ Panel {
         Dropdown {
           width: parent.width
           label: "Cadence"
-          // "Illimitée" only exists for the AI endpoint (an omitted
-          // clock). The seek endpoint (mode "human") has no untimed
-          // option at all, so it's left out of the list rather than
-          // silently reinterpreted as something else.
-          options: (root.hostWidget && root.hostWidget.settingsMode === "human")
+          // Confirmed empirically against the live API: POST
+          // /api/board/seek (modes "casual"/"rated") rejects Bullet and
+          // Blitz outright ("Invalid time control", even in an
+          // otherwise-minimal request) and has no untimed option either
+          // — only Rapide and Correspondance work. The AI endpoint (mode
+          // "ai") has no such restriction.
+          options: (root.hostWidget && root.hostWidget.settingsMode !== "ai")
             ? [
-                { value: "bullet", label: "Bullet 1+0" },
-                { value: "blitz", label: "Blitz 5+3" },
                 { value: "rapid", label: "Rapide 10+5" },
                 { value: "correspondence", label: "Correspondance 2j" }
               ]
