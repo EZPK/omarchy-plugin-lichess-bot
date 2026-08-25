@@ -198,7 +198,7 @@ BarWidget {
     var pagePath = Qt.resolvedUrl("webapp/launch.html").toString()
     var url = pagePath + "#" + parts.join("&")
 
-    launcherProc.command = ["brave", "--app=" + url]
+    launcherProc.command = ["brave", "--app=" + url, "--window-size=520,440"]
     launcherProc.running = true
   }
 

@@ -150,13 +150,33 @@ function humanFlow(params) {
   showStatus("Recherche d'un adversaire de ton niveau…")
 
   var matched = false
+  var stopped = false
+  var seekAbort = new AbortController()
+  var eventAbort = new AbortController()
+
   var giveUpAfterMs = 5 * 60 * 1000
   var giveUpTimer = setTimeout(function() {
-    if (!matched) showError("Personne n'a été trouvé après 5 minutes. Réessaie plus tard, ou élargis la cadence.")
+    if (!matched) fail("Personne n'a été trouvé après 5 minutes. Réessaie plus tard, ou élargis la cadence.")
   }, giveUpAfterMs)
 
+  // Single failure path for both legs: whichever one breaks, the other
+  // is aborted too, so a working seek never keeps running unmonitored
+  // just because the event stream (the only thing that can tell us a
+  // match happened) failed — that would leave a live seek nobody is
+  // watching, and a real opponent could get paired with no way for this
+  // page to redirect to the game.
+  function fail(message) {
+    if (matched || stopped) return
+    stopped = true
+    clearTimeout(giveUpTimer)
+    seekAbort.abort()
+    eventAbort.abort()
+    console.error("lichess-bot human mode failed:", message)
+    showError(message + "\n\nLa recherche d'adversaire a été annulée — cette fenêtre ne créera pas de partie.")
+  }
+
   function onMatched(gameId) {
-    if (matched) return
+    if (matched || stopped) return
     matched = true
     clearTimeout(giveUpTimer)
     window.location.href = "https://lichess.org/" + gameId
@@ -179,7 +199,7 @@ function humanFlow(params) {
           var line = lines[i].trim()
           if (line) onLine(line)
         }
-        if (matched) return
+        if (matched || stopped) return
         return step()
       })
     }
@@ -202,11 +222,10 @@ function humanFlow(params) {
   // Both legs report in here so the status line always reflects the
   // furthest either one has gotten, instead of silently sitting on the
   // initial "Recherche…" message if one leg is stuck or slow.
-  var seekState = "connecting" // connecting | open | error
+  var seekState = "connecting" // connecting | open
   var eventState = "connecting"
   function refreshStatus() {
-    if (matched) return
-    if (seekState === "error" || eventState === "error") return // showError already took over
+    if (matched || stopped) return
     if (seekState === "connecting" || eventState === "connecting") {
       showStatus("Connexion à lichess.org…")
     } else {
@@ -224,13 +243,13 @@ function humanFlow(params) {
       "Authorization": "Bearer " + params.token,
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: seekBody.toString()
+    body: seekBody.toString(),
+    signal: seekAbort.signal
   })
     .then(function(res) {
       if (!res.ok) {
-        seekState = "error"
         return res.json().catch(function() { return null }).then(function(json) {
-          if (!matched) showError("Recherche d'adversaire refusée : " + errorDetail(json, res.status))
+          fail("Recherche d'adversaire refusée : " + errorDetail(json, res.status))
         })
       }
       seekState = "open"
@@ -238,19 +257,19 @@ function humanFlow(params) {
       return pumpLines(res, function() { /* keep-alive lines, ignored */ })
     })
     .catch(function(err) {
-      seekState = "error"
-      if (!matched) showError("Recherche d'adversaire : " + String(err))
+      if (err && err.name === "AbortError") return // our own cleanup, not a real failure
+      fail("Recherche d'adversaire : " + String(err))
     })
 
   // The account event stream: this is what actually tells us a game
   // started, and which one.
   fetch("https://lichess.org/api/stream/event", {
-    headers: { "Authorization": "Bearer " + params.token }
+    headers: { "Authorization": "Bearer " + params.token },
+    signal: eventAbort.signal
   })
     .then(function(res) {
       if (!res.ok) {
-        eventState = "error"
-        if (!matched) showError("Flux d'évènements refusé (HTTP " + res.status + "). Vérifie que le token a bien le scope board:play.")
+        fail("Flux d'évènements refusé (HTTP " + res.status + "). Vérifie que le token a bien le scope board:play — régénère-en un si besoin.")
         return
       }
       eventState = "open"
@@ -262,8 +281,8 @@ function humanFlow(params) {
       })
     })
     .catch(function(err) {
-      eventState = "error"
-      if (!matched) showError("Flux d'évènements : " + String(err))
+      if (err && err.name === "AbortError") return
+      fail("Flux d'évènements : " + String(err))
     })
 }
 
