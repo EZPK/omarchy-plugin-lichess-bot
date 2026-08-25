@@ -173,14 +173,17 @@ BarWidget {
     if (root.draftToken.trim().length > 0) tokenCheckDebounce.restart()
   }
 
-  // Reverted back to the knight glyph: the real reason it never looked
-  // "lit up" was PersistentProperties silently losing the saved token on
-  // every full restart (see settingsPath above) — tokenStatus never
-  // reached "valid" across a restart, so the pill sat at dimmed's 45%
-  // opacity indefinitely, which reads as flat/dark on a bar background
-  // regardless of the glyph. If it's still stuck dark after this fix,
-  // that theory was wrong and it really is a font/glyph issue.
-  readonly property string pillText: "♞"
+  // The Unicode chess-knight symbol (♞) was confirmed to render with a
+  // fixed white-outline/black-fill baked into the glyph itself, ignoring
+  // WidgetButton's text color entirely — a real font issue this time,
+  // not the earlier persistence bug. This is a Nerd Font icon instead
+  // (Material Design Icons "chess-knight"), same family Pomodoro's
+  // glyphs use: plain monochrome outline, so it follows text color and
+  // dimmed's opacity correctly. Codepoint confirmed directly against the
+  // installed font (JetBrainsMono Nerd Font) via its cmap, not guessed —
+  // Nerd Fonts 3.0 relocated this icon block and a guess from an older
+  // cheat sheet would have shown a blank box.
+  readonly property string pillText: "\u{f0858}" // nf-md-chess_knight
   readonly property string pillTooltip: "Lichess Bot — clic gauche : nouvelle partie · clic droit : réglages"
 
   function injectPanel() {
