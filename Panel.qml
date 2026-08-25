@@ -85,7 +85,11 @@ Panel {
         }
 
         Button {
-          text: "Créer un token (challenge:write + board:play)"
+          // Was "Créer un token (challenge:write + board:play)" — a
+          // Button auto-sizes to its label with no wrapping, so a long
+          // enough one overflows the panel's width outright. The scopes
+          // are still documented, just in README.md instead of here.
+          text: "Créer un token"
           bordered: true
           focusable: true
           foreground: root.foreground
@@ -123,62 +127,30 @@ Panel {
         }
 
         Text {
+          // One combined line instead of three separate paragraphs
+          // (rating, rated-mode note, casual-mode note) — this panel's
+          // total height was pushing Cadence low enough that its own
+          // dropdown list, which only opens downward, had nowhere left
+          // to open into. Scope requirement is in README.md.
           visible: root.hostWidget && root.hostWidget.settingsMode !== "ai"
           width: parent.width
           wrapMode: Text.WordWrap
           text: root.hostWidget
-            ? "Ton classement (" + (root.hostWidget.settingsClockPreset === "correspondence" ? "correspondance" : "rapide") +
-              ") : " + root.hostWidget.currentRating() + " — recherche ±150"
+            ? "Classement " + (root.hostWidget.settingsClockPreset === "correspondence" ? "correspondance" : "rapide") +
+              " : " + root.hostWidget.currentRating() + " (±150)" +
+              (root.hostWidget.settingsMode === "rated" ? " — classée, affecte ton classement" : " — non classée")
             : ""
           color: Qt.darker(root.foreground, 1.4)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }
 
-        Text {
-          visible: root.hostWidget && root.hostWidget.settingsMode === "rated"
-          width: parent.width
-          wrapMode: Text.WordWrap
-          text: "Partie classée : affecte ton classement Lichess réel. Nécessite le scope board:play sur le token."
-          color: Qt.darker(root.foreground, 1.4)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-        }
-
-        Text {
-          visible: root.hostWidget && root.hostWidget.settingsMode === "casual"
-          width: parent.width
-          wrapMode: Text.WordWrap
-          text: "Partie non classée : aucun impact sur ton classement. Nécessite le scope board:play sur le token."
-          color: Qt.darker(root.foreground, 1.4)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-        }
-
-        Column {
-          width: parent.width
-          spacing: Style.space(4)
-          Text {
-            text: "Couleur"
-            color: Qt.darker(root.foreground, 1.4)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-          ButtonGroup {
-            width: parent.width
-            options: [
-              { value: "random", label: "Aléatoire" },
-              { value: "white", label: "Blancs" },
-              { value: "black", label: "Noirs" }
-            ]
-            value: root.hostWidget ? root.hostWidget.settingsColor : "random"
-            foreground: root.foreground
-            onChanged: function(v) { if (root.hostWidget) root.hostWidget.setColor(v) }
-          }
-        }
-
         Dropdown {
+          // Moved ahead of Couleur (was after it): this is the one
+          // control in the panel whose own popup list needs room to open
+          // downward, so it gets first claim on whatever vertical space
+          // is left in the card rather than sitting lowest and most
+          // likely to have nowhere left to open into.
           width: parent.width
           label: "Cadence"
           // Confirmed empirically against the live API: POST
@@ -205,6 +177,29 @@ Panel {
           onChanged: function(v) { if (root.hostWidget) root.hostWidget.setClockPreset(v) }
         }
 
+        Column {
+          width: parent.width
+          spacing: Style.space(4)
+          Text {
+            text: "Couleur"
+            color: Qt.darker(root.foreground, 1.4)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+          ButtonGroup {
+            width: parent.width
+            options: [
+              { value: "random", label: "Aléatoire" },
+              { value: "white", label: "Blancs" },
+              { value: "black", label: "Noirs" }
+            ]
+            value: root.hostWidget ? root.hostWidget.settingsColor : "random"
+            foreground: root.foreground
+            onChanged: function(v) { if (root.hostWidget) root.hostWidget.setColor(v) }
+          }
+        }
+
         PanelSeparator { foreground: root.foreground }
 
         Text {
@@ -215,15 +210,6 @@ Panel {
           color: Color.urgent
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
-        }
-
-        Text {
-          width: parent.width
-          wrapMode: Text.WordWrap
-          text: "Une fois configuré, clic gauche sur la pastille pour lancer une partie directement."
-          color: Qt.darker(root.foreground, 1.4)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
         }
       }
       }
