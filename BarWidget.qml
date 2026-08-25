@@ -158,7 +158,11 @@ BarWidget {
     if (root.draftToken.trim().length > 0) tokenCheckDebounce.restart()
   }
 
-  readonly property string pillText: "♞"
+  // Plain text, not a chess-glyph: some fallback fonts render ♞/♘ with a
+  // fixed fill baked into the glyph, which ignores WidgetButton's text
+  // color entirely — dimmed/undimmed then only changes opacity, and the
+  // icon still reads as flat black either way. Letters can't do that.
+  readonly property string pillText: "Chess"
   readonly property string pillTooltip: "Lichess Bot — clic gauche : nouvelle partie · clic droit : réglages"
 
   function injectPanel() {
