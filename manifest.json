@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "lichess-bot",
+  "name": "Lichess Bot",
+  "version": "1.0.0",
+  "author": "EZPK",
+  "description": "Lance une partie contre le bot Lichess (niveaux 1-8) en un clic depuis la barre",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Lichess Bot",
+    "description": "Choisis niveau, couleur et cadence puis lance directement une partie contre l'IA Lichess",
+    "category": "Games",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
