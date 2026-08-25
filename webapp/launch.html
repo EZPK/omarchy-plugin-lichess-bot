@@ -233,6 +233,10 @@ function humanFlow(params) {
     }
   }
 
+  // TEMP DEBUG: log the exact body so a rejection can be compared against
+  // what was actually sent, not just assumed from the source code.
+  console.log("lichess-bot seek body:", seekBody.toString())
+
   // The seek itself: stays open, sends periodic empty lines, and closes
   // with no data once paired. We don't need anything it sends — just
   // keep reading so the connection (and therefore the seek) stays alive
@@ -249,7 +253,8 @@ function humanFlow(params) {
     .then(function(res) {
       if (!res.ok) {
         return res.json().catch(function() { return null }).then(function(json) {
-          fail("Recherche d'adversaire refusée : " + errorDetail(json, res.status))
+          fail("Recherche d'adversaire refusée : " + errorDetail(json, res.status) +
+            "\n\nCorps envoyé : " + seekBody.toString())
         })
       }
       seekState = "open"
