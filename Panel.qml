@@ -108,29 +108,20 @@ Panel {
           }
         }
 
-        Column {
+        Dropdown {
           width: parent.width
-          spacing: Style.space(4)
-          Text {
-            text: "Cadence"
-            color: Qt.darker(root.foreground, 1.4)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-          ButtonGroup {
-            width: parent.width
-            options: [
-              { value: "unlimited", label: "Illimitée" },
-              { value: "bullet", label: "Bullet 1+0" },
-              { value: "blitz", label: "Blitz 5+3" },
-              { value: "rapid", label: "Rapide 10+5" },
-              { value: "correspondence", label: "Corres. 2j" }
-            ]
-            value: root.hostWidget ? root.hostWidget.settingsClockPreset : "unlimited"
-            foreground: root.foreground
-            onChanged: function(v) { if (root.hostWidget) root.hostWidget.setClockPreset(v) }
-          }
+          label: "Cadence"
+          options: [
+            { value: "unlimited", label: "Illimitée" },
+            { value: "bullet", label: "Bullet 1+0" },
+            { value: "blitz", label: "Blitz 5+3" },
+            { value: "rapid", label: "Rapide 10+5" },
+            { value: "correspondence", label: "Correspondance 2j" }
+          ]
+          value: root.hostWidget ? root.hostWidget.settingsClockPreset : "unlimited"
+          foreground: root.foreground
+          background: root.bar ? root.bar.background : Color.background
+          onChanged: function(v) { if (root.hostWidget) root.hostWidget.setClockPreset(v) }
         }
 
         PanelSeparator { foreground: root.foreground }
