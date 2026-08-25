@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
@@ -22,7 +23,13 @@ Panel {
     bar: root.bar
     open: root.opened
     contentWidth: popup.fittedContentWidth(Style.space(340))
-    contentHeight: popup.fittedContentHeight(mainColumn.implicitHeight)
+    // Capped: this panel's content has grown past what fits on shorter
+    // screens (three modes, per-mode hint text, rating line...) with no
+    // way to reach what's cut off — fittedContentHeight() only clamps to
+    // the screen's available height, it doesn't add scrolling on its
+    // own. The Flickable below (same pattern as the built-in
+    // tailscale/bluetooth/dropbox panels) makes the excess reachable.
+    contentHeight: popup.fittedContentHeight(mainColumn.implicitHeight, Style.space(480))
     focusTarget: keyCatcher
 
     PanelKeyCatcher {
@@ -30,9 +37,20 @@ Panel {
       anchors.fill: parent
       onCloseRequested: root.close()
 
+      Flickable {
+        id: panelFlick
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: mainColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
       Column {
         id: mainColumn
-        width: parent.width
+        width: panelFlick.width
         spacing: Style.space(12)
 
         PanelSectionHeader { text: "Réglages — Lichess Bot"; foreground: root.foreground }
@@ -207,6 +225,7 @@ Panel {
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }
+      }
       }
     }
   }
