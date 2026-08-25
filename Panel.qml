@@ -67,7 +67,7 @@ Panel {
         }
 
         Button {
-          text: "Créer un token (challenge:write)"
+          text: "Créer un token (challenge:write + board:play)"
           bordered: true
           focusable: true
           foreground: root.foreground
@@ -76,13 +76,57 @@ Panel {
 
         PanelSeparator { foreground: root.foreground }
 
+        Column {
+          width: parent.width
+          spacing: Style.space(4)
+          Text {
+            text: "Adversaire"
+            color: Qt.darker(root.foreground, 1.4)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+          ButtonGroup {
+            width: parent.width
+            options: [
+              { value: "ai", label: "Bot Lichess" },
+              { value: "human", label: "Joueur, même niveau" }
+            ]
+            value: root.hostWidget ? root.hostWidget.settingsMode : "ai"
+            foreground: root.foreground
+            onChanged: function(v) { if (root.hostWidget) root.hostWidget.setMode(v) }
+          }
+        }
+
         NumberField {
+          visible: root.hostWidget && root.hostWidget.settingsMode === "ai"
           label: "Niveau du bot (1-8)"
           from: 1
           to: 8
           value: root.hostWidget ? root.hostWidget.settingsLevel : 3
           foreground: root.foreground
           onModified: function(v) { if (root.hostWidget) root.hostWidget.setLevel(v) }
+        }
+
+        NumberField {
+          visible: root.hostWidget && root.hostWidget.settingsMode === "human"
+          label: "Ton classement Elo approximatif"
+          from: 400
+          to: 3000
+          stepSize: 25
+          value: root.hostWidget ? root.hostWidget.settingsRating : 1500
+          foreground: root.foreground
+          onModified: function(v) { if (root.hostWidget) root.hostWidget.setRating(v) }
+        }
+
+        Text {
+          visible: root.hostWidget && root.hostWidget.settingsMode === "human"
+          width: parent.width
+          wrapMode: Text.WordWrap
+          text: "Cherche un adversaire non classé dans ±150 points autour de ce classement. Nécessite le scope board:play sur le token."
+          color: Qt.darker(root.foreground, 1.4)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
         }
 
         Column {

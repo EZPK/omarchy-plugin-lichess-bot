@@ -42,9 +42,11 @@ BarWidget {
     JsonAdapter {
       id: persisted
       property string apiToken: ""
+      property string mode: "ai" // "ai" | "human"
       property int level: 3
       property string color: "random"
       property string clockPreset: "unlimited"
+      property int rating: 1500 // used for "human" mode's rating range
     }
   }
 
@@ -55,9 +57,11 @@ BarWidget {
   property string draftToken: persisted.apiToken
 
   readonly property string settingsApiToken: draftToken
+  readonly property string settingsMode: persisted.mode
   readonly property int settingsLevel: persisted.level
   readonly property string settingsColor: persisted.color
   readonly property string settingsClockPreset: persisted.clockPreset
+  readonly property int settingsRating: persisted.rating
   readonly property string lastError: _lastError
 
   property string _lastError: ""
@@ -75,14 +79,19 @@ BarWidget {
     tokenCheckDebounce.restart()
   }
 
+  function setMode(v) { persisted.mode = v }
   function setLevel(v) { persisted.level = Math.max(1, Math.min(8, Math.round(v))) }
   function setColor(v) { persisted.color = v }
   function setClockPreset(v) { persisted.clockPreset = v }
+  function setRating(v) { persisted.rating = Math.max(400, Math.min(3000, Math.round(v))) }
 
   function openTokenPage() {
+    // board:play is only needed for "human" mode (POST /api/board/seek +
+    // the account event stream), but requesting it unconditionally means
+    // switching modes later never requires generating a second token.
     var url = "https://lichess.org/account/oauth/token/create" +
       "?description=" + encodeURIComponent("Omarchy Lichess Bot plugin") +
-      "&scopes[]=challenge:write"
+      "&scopes[]=challenge:write&scopes[]=board:play"
     Qt.openUrlExternally(url)
   }
 
@@ -149,15 +158,33 @@ BarWidget {
 
     var parts = [
       "token=" + encodeURIComponent(persisted.apiToken),
-      "level=" + encodeURIComponent(persisted.level),
+      "mode=" + encodeURIComponent(persisted.mode),
       "color=" + encodeURIComponent(persisted.color)
     ]
-    switch (persisted.clockPreset) {
-      case "bullet": parts.push("clockLimit=60", "clockIncrement=0"); break
-      case "blitz": parts.push("clockLimit=300", "clockIncrement=3"); break
-      case "rapid": parts.push("clockLimit=600", "clockIncrement=5"); break
-      case "correspondence": parts.push("days=2"); break
-      default: break // "unlimited": no clock params
+
+    if (persisted.mode === "human") {
+      // /api/board/seek's "time" is in *minutes* (unlike the AI
+      // endpoint's clock.limit, which is seconds) — and it has no
+      // untimed option, so "unlimited" falls back to blitz for seeks.
+      var spread = 150
+      parts.push("ratingMin=" + Math.max(0, persisted.rating - spread))
+      parts.push("ratingMax=" + (persisted.rating + spread))
+      var seekPreset = persisted.clockPreset === "unlimited" ? "blitz" : persisted.clockPreset
+      switch (seekPreset) {
+        case "bullet": parts.push("time=1", "increment=0"); break
+        case "rapid": parts.push("time=10", "increment=5"); break
+        case "correspondence": parts.push("days=2"); break
+        default: parts.push("time=5", "increment=3"); break // "blitz"
+      }
+    } else {
+      parts.push("level=" + encodeURIComponent(persisted.level))
+      switch (persisted.clockPreset) {
+        case "bullet": parts.push("clockLimit=60", "clockIncrement=0"); break
+        case "blitz": parts.push("clockLimit=300", "clockIncrement=3"); break
+        case "rapid": parts.push("clockLimit=600", "clockIncrement=5"); break
+        case "correspondence": parts.push("days=2"); break
+        default: break // "unlimited": no clock params sent
+      }
     }
 
     var pagePath = Qt.resolvedUrl("webapp/launch.html").toString()

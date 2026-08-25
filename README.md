@@ -1,9 +1,10 @@
 # Omarchy Lichess Bot
 
-Un lanceur de partie contre l'IA Lichess (niveaux 1-8) depuis la barre
-Omarchy : choisis le niveau, la couleur et la cadence dans le popup, puis
-clique "Nouvelle partie" — une petite fenêtre dédiée crée la partie et
-t'emmène directement dessus sur lichess.org.
+Un lanceur de partie Lichess depuis la barre Omarchy : contre le bot
+(niveaux 1-8) ou contre un joueur humain de ton niveau. Choisis
+l'adversaire, la couleur et la cadence dans le popup, puis clique
+"Nouvelle partie" — une petite fenêtre dédiée crée la partie (ou
+recherche un adversaire) et t'emmène directement dessus sur lichess.org.
 
 ## Pourquoi pas un échiquier intégré au shell ?
 
@@ -23,12 +24,25 @@ cross-origin depuis la petite page locale (`webapp/launch.html`) vers
 "app" du navigateur (sans barre d'adresse ni onglets), qui crée la partie
 puis redirige directement dessus.
 
+## Deux modes
+
+- **Bot Lichess** : niveau 1-8, couleur, cadence. Crée la partie
+  immédiatement (`POST /api/challenge/ai`).
+- **Joueur, même niveau** : renseigne ton classement Elo approximatif ;
+  le plugin cherche un adversaire non classé dans ±150 points autour
+  (`POST /api/board/seek`). La recherche reste ouverte dans la fenêtre
+  jusqu'à trouver quelqu'un (abandon au bout de 5 minutes) — Lichess
+  n'indique pas directement la partie créée par cet appel, la page
+  surveille donc en parallèle le flux d'évènements du compte
+  (`GET /api/stream/event`) pour détecter le début de partie.
+
 ## Prérequis
 
 - Un compte Lichess.
-- Un **token d'accès personnel** avec le scope `challenge:write`. Le
-  bouton "Créer un token" dans les réglages ouvre la page Lichess avec ce
-  scope déjà coché.
+- Un **token d'accès personnel** avec les scopes `challenge:write` (mode
+  bot) et `board:play` (mode joueur, recherche + flux d'évènements). Le
+  bouton "Créer un token" dans les réglages ouvre la page Lichess avec
+  les deux scopes déjà cochés.
 - Un navigateur basé sur Chromium installé (`brave` par défaut — change
   `launcherProc.command` dans `BarWidget.qml` si tu utilises un autre
   navigateur compatible `--app=`).
@@ -73,7 +87,8 @@ Ou supprime directement `~/.config/omarchy/plugins/lichess-bot`.
 
 ## Limites
 
-- Uniquement contre le bot Lichess ; pas de mode joueur contre joueur.
+- La recherche d'adversaire humain est toujours en partie non classée
+  (`rated: false`) — pas d'impact sur le classement de personne.
 - La partie se joue sur lichess.org, dans la fenêtre ouverte par le
   plugin — pas d'échiquier intégré à la barre.
 

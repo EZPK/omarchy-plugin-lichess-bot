@@ -85,20 +85,28 @@ function readParams() {
   return params
 }
 
+function showStatus(text) {
+  document.getElementById("status").textContent = text
+}
+
 function showError(message) {
   document.getElementById("spinner").style.display = "none"
-  document.getElementById("status").textContent = "Échec de la création de la partie."
+  document.getElementById("status").textContent = "Échec."
   var errEl = document.getElementById("error")
   errEl.style.display = "block"
   errEl.textContent = message
   document.getElementById("closeBtn").style.display = "inline-block"
 }
 
-var params = readParams()
+function errorDetail(json, status) {
+  if (json && json.error) {
+    return typeof json.error === "string" ? json.error : JSON.stringify(json.error)
+  }
+  return "HTTP " + status
+}
 
-if (!params.token) {
-  showError("Aucun token fourni.")
-} else {
+// ---- Mode "ai": one POST, the response carries the new game's id. ----
+function aiFlow(params) {
   var body = new URLSearchParams()
   body.set("level", params.level || "3")
   body.set("color", params.color || "random")
@@ -127,15 +135,119 @@ if (!params.token) {
       if (result.ok && result.json && result.json.id) {
         window.location.href = "https://lichess.org/" + result.json.id
       } else {
-        var detail = result.json && result.json.error
-          ? (typeof result.json.error === "string" ? result.json.error : JSON.stringify(result.json.error))
-          : ("HTTP " + result.status)
-        showError(detail)
+        showError(errorDetail(result.json, result.status))
       }
     })
-    .catch(function(err) {
-      showError(String(err))
+    .catch(function(err) { showError(String(err)) })
+}
+
+// ---- Mode "human": POST /api/board/seek stays open (streaming) until
+// matched, and never reports a game id itself — the API docs say to keep
+// the account event stream open in parallel and watch for a "gameStart"
+// event there. Both requests are plain fetch() streams; there's no
+// polling involved. ----
+function humanFlow(params) {
+  showStatus("Recherche d'un adversaire de ton niveau…")
+
+  var matched = false
+  var giveUpAfterMs = 5 * 60 * 1000
+  var giveUpTimer = setTimeout(function() {
+    if (!matched) showError("Personne n'a été trouvé après 5 minutes. Réessaie plus tard, ou élargis la cadence.")
+  }, giveUpAfterMs)
+
+  function onMatched(gameId) {
+    if (matched) return
+    matched = true
+    clearTimeout(giveUpTimer)
+    window.location.href = "https://lichess.org/" + gameId
+  }
+
+  // Drains a streaming Response body, calling onLine(text) for every
+  // complete line. Resolves once the stream ends (matched, cancelled, or
+  // the connection dropped).
+  function pumpLines(response, onLine) {
+    var reader = response.body.getReader()
+    var decoder = new TextDecoder()
+    var buffer = ""
+    function step() {
+      return reader.read().then(function(r) {
+        if (r.done) return
+        buffer += decoder.decode(r.value, { stream: true })
+        var lines = buffer.split("\n")
+        buffer = lines.pop()
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim()
+          if (line) onLine(line)
+        }
+        if (matched) return
+        return step()
+      })
+    }
+    return step()
+  }
+
+  var seekBody = new URLSearchParams()
+  seekBody.set("rated", "false")
+  if (params.ratingMin && params.ratingMax) {
+    seekBody.set("ratingRange", params.ratingMin + "-" + params.ratingMax)
+  }
+  if (params.color) seekBody.set("color", params.color)
+  if (params.days) {
+    seekBody.set("days", params.days)
+  } else {
+    seekBody.set("time", params.time || "5")
+    seekBody.set("increment", params.increment || "3")
+  }
+
+  // The seek itself: stays open, sends periodic empty lines, and closes
+  // with no data once paired. We don't need anything it sends — just
+  // keep reading so the connection (and therefore the seek) stays alive
+  // until matched or this page goes away.
+  fetch("https://lichess.org/api/board/seek", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + params.token,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: seekBody.toString()
+  })
+    .then(function(res) {
+      if (!res.ok) {
+        return res.json().catch(function() { return null }).then(function(json) {
+          if (!matched) showError(errorDetail(json, res.status))
+        })
+      }
+      return pumpLines(res, function() { /* keep-alive lines, ignored */ })
     })
+    .catch(function(err) { if (!matched) showError(String(err)) })
+
+  // The account event stream: this is what actually tells us a game
+  // started, and which one.
+  fetch("https://lichess.org/api/stream/event", {
+    headers: { "Authorization": "Bearer " + params.token }
+  })
+    .then(function(res) {
+      if (!res.ok) {
+        if (!matched) showError("Impossible d'ouvrir le flux d'évènements (HTTP " + res.status + ").")
+        return
+      }
+      return pumpLines(res, function(line) {
+        var evt
+        try { evt = JSON.parse(line) } catch (e) { return }
+        if (evt.type === "gameStart" && evt.game && evt.game.id) onMatched(evt.game.id)
+      })
+    })
+    .catch(function(err) { if (!matched) showError(String(err)) })
+}
+
+var params = readParams()
+
+if (!params.token) {
+  showError("Aucun token fourni.")
+} else if (params.mode === "human") {
+  humanFlow(params)
+} else {
+  aiFlow(params)
 }
 </script>
 </body>
