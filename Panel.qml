@@ -21,7 +21,7 @@ Panel {
     owner: root
     bar: root.bar
     open: root.opened
-    contentWidth: popup.fittedContentWidth(Style.space(320))
+    contentWidth: popup.fittedContentWidth(Style.space(340))
     contentHeight: popup.fittedContentHeight(mainColumn.implicitHeight)
     focusTarget: keyCatcher
 
@@ -76,27 +76,22 @@ Panel {
 
         PanelSeparator { foreground: root.foreground }
 
-        Column {
+        Dropdown {
           width: parent.width
-          spacing: Style.space(4)
-          Text {
-            text: "Adversaire"
-            color: Qt.darker(root.foreground, 1.4)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-          ButtonGroup {
-            width: parent.width
-            options: [
-              { value: "ai", label: "Bot Lichess" },
-              { value: "casual", label: "Joueur, non classé" },
-              { value: "rated", label: "Joueur, classé" }
-            ]
-            value: root.hostWidget ? root.hostWidget.settingsMode : "ai"
-            foreground: root.foreground
-            onChanged: function(v) { if (root.hostWidget) root.hostWidget.setMode(v) }
-          }
+          label: "Adversaire"
+          // A 3-way ButtonGroup here overflowed the popup — same issue
+          // Cadence had with 5 options — since ButtonGroup lays chips out
+          // in a single non-wrapping row. Dropdown doesn't have that
+          // problem regardless of how many/long the options are.
+          options: [
+            { value: "ai", label: "Bot Lichess" },
+            { value: "casual", label: "Joueur, non classé" },
+            { value: "rated", label: "Joueur, classé" }
+          ]
+          value: root.hostWidget ? root.hostWidget.settingsMode : "ai"
+          foreground: root.foreground
+          background: root.bar ? root.bar.background : Color.background
+          onChanged: function(v) { if (root.hostWidget) root.hostWidget.setMode(v) }
         }
 
         NumberField {
