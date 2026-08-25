@@ -53,6 +53,7 @@
   <div class="spinner" id="spinner"></div>
   <div id="status">Création de la partie…</div>
   <div class="error" id="error" style="display:none"></div>
+  <div id="debugParams" style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.5;margin-top:14px;word-break:break-all;"></div>
   <button id="closeBtn" style="display:none" onclick="window.close()">Fermer</button>
 </div>
 <script>
@@ -292,6 +293,13 @@ function humanFlow(params) {
 }
 
 var params = readParams()
+
+// TEMP DEBUG: show exactly what this page parsed, right on the page
+// itself — no devtools needed to see which branch is about to run.
+// Token redacted since it's not relevant to this diagnostic.
+document.getElementById("debugParams").textContent =
+  "mode reçu : " + JSON.stringify(params.mode) +
+  " — hash brut : " + location.hash.replace(/token=[^&]*/, "token=<redacted>")
 
 if (!params.token) {
   showError("Aucun token fourni.")
