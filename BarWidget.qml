@@ -33,7 +33,13 @@ BarWidget {
     property string clockPreset: "unlimited"
   }
 
-  readonly property string settingsApiToken: persisted.apiToken
+  // The field shows/edits draftToken as you type; persisted.apiToken (the
+  // one startGame() actually uses) is only overwritten once that exact
+  // draft has been confirmed to work against Lichess — a bad paste never
+  // clobbers a previously working saved token.
+  property string draftToken: persisted.apiToken
+
+  readonly property string settingsApiToken: draftToken
   readonly property int settingsLevel: persisted.level
   readonly property string settingsColor: persisted.color
   readonly property string settingsClockPreset: persisted.clockPreset
@@ -42,12 +48,13 @@ BarWidget {
   property string _lastError: ""
 
   // "" | "checking" | "valid" | "invalid" — tokenStatusDetail holds the
-  // username on "valid" or the error message on "invalid".
+  // username on "valid" or the error message on "invalid". "valid" means
+  // draftToken is exactly what's saved in persisted.apiToken right now.
   property string tokenStatus: ""
   property string tokenStatusDetail: ""
 
   function setApiToken(v) {
-    persisted.apiToken = v
+    draftToken = v
     tokenStatus = ""
     tokenStatusDetail = ""
     tokenCheckDebounce.restart()
@@ -68,7 +75,7 @@ BarWidget {
     id: tokenCheckDebounce
     interval: 800
     onTriggered: {
-      var token = persisted.apiToken.trim()
+      var token = root.draftToken.trim()
       if (token.length === 0) {
         root.tokenStatus = ""
         root.tokenStatusDetail = ""
@@ -76,13 +83,20 @@ BarWidget {
       }
       root.tokenStatus = "checking"
       root.tokenStatusDetail = ""
+      tokenCheckProc.checkedToken = token
       tokenCheckProc.run(token)
     }
   }
 
   TokenCheck {
     id: tokenCheckProc
+    property string checkedToken: ""
     onFinished: function(text) {
+      // The draft moved on since this specific check started (more
+      // typing/pasting during the round trip) — its result no longer
+      // describes what's in the field, so it must not be saved or shown.
+      if (checkedToken !== root.draftToken.trim()) return
+
       var marker = "HTTPSTATUSMARKER:"
       var idx = text.lastIndexOf(marker)
       var status = 0
@@ -94,19 +108,18 @@ BarWidget {
       var json = null
       try { json = JSON.parse(body) } catch (e) { /* not JSON */ }
 
-      // A token typed/pasted after this check started, still pending its
-      // own debounce, shouldn't be overwritten by a stale result.
-      if (persisted.apiToken.trim().length === 0) return
-
       if (status === 200 && json && json.username) {
         root.tokenStatus = "valid"
         root.tokenStatusDetail = json.username
+        persisted.apiToken = checkedToken
       } else {
         root.tokenStatus = "invalid"
         var detail = json && json.error
         root.tokenStatusDetail = detail
           ? (typeof detail === "string" ? detail : JSON.stringify(detail))
           : ("HTTP " + status)
+        // persisted.apiToken is deliberately left untouched: a bad paste
+        // shouldn't erase a token that was already confirmed working.
       }
     }
   }
@@ -142,7 +155,7 @@ BarWidget {
   Process { id: launcherProc }
 
   Component.onCompleted: {
-    if (persisted.apiToken.trim().length > 0) tokenCheckDebounce.restart()
+    if (root.draftToken.trim().length > 0) tokenCheckDebounce.restart()
   }
 
   readonly property string pillText: "♞"
