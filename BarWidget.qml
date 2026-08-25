@@ -231,11 +231,36 @@ BarWidget {
     var pagePath = Qt.resolvedUrl("webapp/launch.html").toString()
     var url = pagePath + "#" + parts.join("&")
 
-    launcherProc.command = ["brave", "--app=" + url, "--window-size=520,440"]
+    // A fresh --user-data-dir every launch forces a genuinely new,
+    // isolated Chromium instance instead of one that can get treated as
+    // "already running" and just focused without reloading — observed
+    // as "Opening in existing browser session" in the shell's log, which
+    // showed whatever mode/params an earlier launch had loaded instead
+    // of the current one. No persistent profile is needed here anyway:
+    // every request carries its own Authorization header, nothing relies
+    // on cookies or history surviving between launches.
+    var profileDir = "/tmp/omarchy-lichess-bot-" + Date.now()
+    launcherProc.profileDir = profileDir
+    launcherProc.command = [
+      "brave", "--app=" + url, "--window-size=520,440",
+      "--user-data-dir=" + profileDir, "--no-first-run"
+    ]
     launcherProc.running = true
   }
 
-  Process { id: launcherProc }
+  Process {
+    id: launcherProc
+    property string profileDir: ""
+    onExited: function(exitCode, exitStatus) {
+      if (profileDir) cleanupProc.command = ["rm", "-rf", profileDir]
+      if (profileDir) cleanupProc.running = true
+    }
+  }
+
+  // Fire-and-forget removal of a closed window's temporary profile dir —
+  // separate from launcherProc since that Process object is about to be
+  // reused for the next launch by the time this runs.
+  Process { id: cleanupProc }
 
   Component.onCompleted: {
     if (root.draftToken.trim().length > 0) tokenCheckDebounce.restart()
