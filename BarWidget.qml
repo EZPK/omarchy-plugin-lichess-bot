@@ -23,14 +23,29 @@ BarWidget {
   id: root
   moduleName: "lichess-bot"
 
-  PersistentProperties {
-    id: persisted
-    reloadableId: "lichess-bot-settings"
+  // PersistentProperties only survives a QML hot-reload within the same
+  // running Quickshell process — not a full restart (`omarchy restart
+  // shell`, a logout, a reboot), which starts a brand new process with
+  // none of that in-memory state. Settings need to outlive that, so they
+  // live in a real file instead, in the same place Omarchy's own shell
+  // keeps its state (~/.local/state/omarchy/*.json).
+  readonly property string settingsPath: Quickshell.env("HOME") + "/.local/state/omarchy/lichess-bot-settings.json"
 
-    property string apiToken: ""
-    property int level: 3
-    property string color: "random"
-    property string clockPreset: "unlimited"
+  FileView {
+    id: settingsFile
+    path: root.settingsPath
+    blockLoading: true
+    watchChanges: true
+    onFileChanged: reload()
+    onAdapterUpdated: writeAdapter()
+
+    JsonAdapter {
+      id: persisted
+      property string apiToken: ""
+      property int level: 3
+      property string color: "random"
+      property string clockPreset: "unlimited"
+    }
   }
 
   // The field shows/edits draftToken as you type; persisted.apiToken (the
@@ -158,11 +173,14 @@ BarWidget {
     if (root.draftToken.trim().length > 0) tokenCheckDebounce.restart()
   }
 
-  // Plain text, not a chess-glyph: some fallback fonts render ♞/♘ with a
-  // fixed fill baked into the glyph, which ignores WidgetButton's text
-  // color entirely — dimmed/undimmed then only changes opacity, and the
-  // icon still reads as flat black either way. Letters can't do that.
-  readonly property string pillText: "Chess"
+  // Reverted back to the knight glyph: the real reason it never looked
+  // "lit up" was PersistentProperties silently losing the saved token on
+  // every full restart (see settingsPath above) — tokenStatus never
+  // reached "valid" across a restart, so the pill sat at dimmed's 45%
+  // opacity indefinitely, which reads as flat/dark on a bar background
+  // regardless of the glyph. If it's still stuck dark after this fix,
+  // that theory was wrong and it really is a font/glyph issue.
+  readonly property string pillText: "♞"
   readonly property string pillTooltip: "Lichess Bot — clic gauche : nouvelle partie · clic droit : réglages"
 
   function injectPanel() {

@@ -57,9 +57,12 @@ Ou supprime directement `~/.config/omarchy/plugins/lichess-bot`.
 
 ## Sécurité
 
-- Le token est stocké **en clair** localement (réglages persistés du
-  widget). Crée un token dédié à ce plugin plutôt que de réutiliser un
-  token existant, pour pouvoir le révoquer indépendamment depuis
+- Le token est stocké **en clair** dans
+  `~/.local/state/omarchy/lichess-bot-settings.json` (même emplacement
+  que l'état propre du shell Omarchy), et seulement après avoir été
+  vérifié avec succès contre l'API Lichess. Crée un token dédié à ce
+  plugin plutôt que de réutiliser un token existant, pour pouvoir le
+  révoquer indépendamment depuis
   [lichess.org/account/oauth/token](https://lichess.org/account/oauth/token).
 - Le token voyage dans le fragment (`#...`) de l'URL passée au navigateur
   au lancement — jamais envoyé à un serveur en tant que tel, mais
