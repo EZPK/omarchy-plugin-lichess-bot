@@ -41,7 +41,18 @@ BarWidget {
 
   property string _lastError: ""
 
-  function setApiToken(v) { persisted.apiToken = v }
+  // "" | "checking" | "valid" | "invalid" — tokenStatusDetail holds the
+  // username on "valid" or the error message on "invalid".
+  property string tokenStatus: ""
+  property string tokenStatusDetail: ""
+
+  function setApiToken(v) {
+    persisted.apiToken = v
+    tokenStatus = ""
+    tokenStatusDetail = ""
+    tokenCheckDebounce.restart()
+  }
+
   function setLevel(v) { persisted.level = Math.max(1, Math.min(8, Math.round(v))) }
   function setColor(v) { persisted.color = v }
   function setClockPreset(v) { persisted.clockPreset = v }
@@ -51,6 +62,53 @@ BarWidget {
       "?description=" + encodeURIComponent("Omarchy Lichess Bot plugin") +
       "&scopes[]=challenge:write"
     Qt.openUrlExternally(url)
+  }
+
+  Timer {
+    id: tokenCheckDebounce
+    interval: 800
+    onTriggered: {
+      var token = persisted.apiToken.trim()
+      if (token.length === 0) {
+        root.tokenStatus = ""
+        root.tokenStatusDetail = ""
+        return
+      }
+      root.tokenStatus = "checking"
+      root.tokenStatusDetail = ""
+      tokenCheckProc.run(token)
+    }
+  }
+
+  TokenCheck {
+    id: tokenCheckProc
+    onFinished: function(text) {
+      var marker = "HTTPSTATUSMARKER:"
+      var idx = text.lastIndexOf(marker)
+      var status = 0
+      var body = text
+      if (idx !== -1) {
+        status = parseInt(text.substring(idx + marker.length).trim(), 10) || 0
+        body = text.substring(0, idx)
+      }
+      var json = null
+      try { json = JSON.parse(body) } catch (e) { /* not JSON */ }
+
+      // A token typed/pasted after this check started, still pending its
+      // own debounce, shouldn't be overwritten by a stale result.
+      if (persisted.apiToken.trim().length === 0) return
+
+      if (status === 200 && json && json.username) {
+        root.tokenStatus = "valid"
+        root.tokenStatusDetail = json.username
+      } else {
+        root.tokenStatus = "invalid"
+        var detail = json && json.error
+        root.tokenStatusDetail = detail
+          ? (typeof detail === "string" ? detail : JSON.stringify(detail))
+          : ("HTTP " + status)
+      }
+    }
   }
 
   function startGame() {
@@ -81,6 +139,10 @@ BarWidget {
   }
 
   Process { id: launcherProc }
+
+  Component.onCompleted: {
+    if (persisted.apiToken.trim().length > 0) tokenCheckDebounce.restart()
+  }
 
   readonly property string pillText: "♞"
   readonly property string pillTooltip: "Lichess Bot — lancer une partie contre le bot"

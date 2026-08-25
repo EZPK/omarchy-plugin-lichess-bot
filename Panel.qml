@@ -48,9 +48,20 @@ Panel {
 
         Text {
           width: parent.width
-          visible: root.hostWidget && root.hostWidget.settingsApiToken.length > 0
-          text: "Token enregistré : " + (root.hostWidget ? root.hostWidget.settingsApiToken.length : 0) + " caractères"
-          color: Qt.darker(root.foreground, 1.4)
+          wrapMode: Text.WordWrap
+          visible: root.hostWidget && root.hostWidget.tokenStatus !== ""
+          text: {
+            if (!root.hostWidget) return ""
+            switch (root.hostWidget.tokenStatus) {
+              case "checking": return "Vérification du token…"
+              case "valid": return "✓ Connecté en tant que " + root.hostWidget.tokenStatusDetail
+              case "invalid": return "✗ Token invalide : " + root.hostWidget.tokenStatusDetail
+              default: return ""
+            }
+          }
+          color: root.hostWidget && root.hostWidget.tokenStatus === "invalid"
+            ? Color.urgent
+            : Qt.darker(root.foreground, 1.4)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }
