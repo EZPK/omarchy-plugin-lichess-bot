@@ -113,7 +113,8 @@ BarWidget {
 
   function startGame() {
     if (persisted.apiToken.trim().length === 0) {
-      _lastError = "Ajoute ton token API Lichess (bouton ci-dessus) avant de lancer une partie."
+      _lastError = "Ajoute ton token API Lichess dans les réglages (clic droit) avant de lancer une partie."
+      root.open()
       return
     }
     _lastError = ""
@@ -145,7 +146,7 @@ BarWidget {
   }
 
   readonly property string pillText: "♞"
-  readonly property string pillTooltip: "Lichess Bot — lancer une partie contre le bot"
+  readonly property string pillTooltip: "Lichess Bot — clic gauche : nouvelle partie · clic droit : réglages"
 
   function injectPanel() {
     var target = panelLoader.item
@@ -197,10 +198,13 @@ BarWidget {
     bar: root.bar
     text: root.pillText
     tooltipText: root.pillTooltip
-    dimmed: true
+    dimmed: root.tokenStatus !== "valid"
     horizontalMargin: 8.75
     verticalPadding: 8.75
 
-    onPressed: function(b) { root.togglePanel() }
+    onPressed: function(b) {
+      if (b === Qt.RightButton) root.open()
+      else root.startGame()
+    }
   }
 }

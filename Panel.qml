@@ -35,7 +35,7 @@ Panel {
         width: parent.width
         spacing: Style.space(12)
 
-        PanelSectionHeader { text: "Défier le bot Lichess"; foreground: root.foreground }
+        PanelSectionHeader { text: "Réglages — Lichess Bot"; foreground: root.foreground }
 
         TextField {
           width: parent.width
@@ -139,19 +139,10 @@ Panel {
         Text {
           width: parent.width
           wrapMode: Text.WordWrap
-          text: "Ouvre une fenêtre dédiée qui crée la partie puis t'emmène directement dessus sur lichess.org."
+          text: "Une fois configuré, clic gauche sur la pastille pour lancer une partie directement."
           color: Qt.darker(root.foreground, 1.4)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
-        }
-
-        Button {
-          anchors.horizontalCenter: parent.horizontalCenter
-          text: "Nouvelle partie"
-          bordered: true
-          focusable: true
-          foreground: root.foreground
-          onClicked: if (root.hostWidget) root.hostWidget.startGame()
         }
       }
     }
