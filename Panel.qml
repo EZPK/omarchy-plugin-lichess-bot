@@ -155,13 +155,24 @@ Panel {
         Dropdown {
           width: parent.width
           label: "Cadence"
-          options: [
-            { value: "unlimited", label: "Illimitée" },
-            { value: "bullet", label: "Bullet 1+0" },
-            { value: "blitz", label: "Blitz 5+3" },
-            { value: "rapid", label: "Rapide 10+5" },
-            { value: "correspondence", label: "Correspondance 2j" }
-          ]
+          // "Illimitée" only exists for the AI endpoint (an omitted
+          // clock). The seek endpoint (mode "human") has no untimed
+          // option at all, so it's left out of the list rather than
+          // silently reinterpreted as something else.
+          options: (root.hostWidget && root.hostWidget.settingsMode === "human")
+            ? [
+                { value: "bullet", label: "Bullet 1+0" },
+                { value: "blitz", label: "Blitz 5+3" },
+                { value: "rapid", label: "Rapide 10+5" },
+                { value: "correspondence", label: "Correspondance 2j" }
+              ]
+            : [
+                { value: "unlimited", label: "Illimitée" },
+                { value: "bullet", label: "Bullet 1+0" },
+                { value: "blitz", label: "Blitz 5+3" },
+                { value: "rapid", label: "Rapide 10+5" },
+                { value: "correspondence", label: "Correspondance 2j" }
+              ]
           value: root.hostWidget ? root.hostWidget.settingsClockPreset : "unlimited"
           foreground: root.foreground
           background: root.bar ? root.bar.background : Color.background

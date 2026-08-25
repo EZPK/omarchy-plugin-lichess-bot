@@ -79,7 +79,15 @@ BarWidget {
     tokenCheckDebounce.restart()
   }
 
-  function setMode(v) { persisted.mode = v }
+  function setMode(v) {
+    persisted.mode = v
+    // "unlimited" isn't offered in the Cadence list once in "human" mode
+    // (the seek endpoint has no untimed option) — if that was the
+    // saved value, land on a real one instead of keeping an option the
+    // dropdown no longer shows.
+    if (v === "human" && persisted.clockPreset === "unlimited") persisted.clockPreset = "blitz"
+  }
+
   function setLevel(v) { persisted.level = Math.max(1, Math.min(8, Math.round(v))) }
   function setColor(v) { persisted.color = v }
   function setClockPreset(v) { persisted.clockPreset = v }

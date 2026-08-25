@@ -199,6 +199,21 @@ function humanFlow(params) {
     seekBody.set("increment", params.increment || "3")
   }
 
+  // Both legs report in here so the status line always reflects the
+  // furthest either one has gotten, instead of silently sitting on the
+  // initial "Recherche…" message if one leg is stuck or slow.
+  var seekState = "connecting" // connecting | open | error
+  var eventState = "connecting"
+  function refreshStatus() {
+    if (matched) return
+    if (seekState === "error" || eventState === "error") return // showError already took over
+    if (seekState === "connecting" || eventState === "connecting") {
+      showStatus("Connexion à lichess.org…")
+    } else {
+      showStatus("Recherche d'un adversaire de ton niveau… (les deux connexions sont ouvertes)")
+    }
+  }
+
   // The seek itself: stays open, sends periodic empty lines, and closes
   // with no data once paired. We don't need anything it sends — just
   // keep reading so the connection (and therefore the seek) stays alive
@@ -213,13 +228,19 @@ function humanFlow(params) {
   })
     .then(function(res) {
       if (!res.ok) {
+        seekState = "error"
         return res.json().catch(function() { return null }).then(function(json) {
-          if (!matched) showError(errorDetail(json, res.status))
+          if (!matched) showError("Recherche d'adversaire refusée : " + errorDetail(json, res.status))
         })
       }
+      seekState = "open"
+      refreshStatus()
       return pumpLines(res, function() { /* keep-alive lines, ignored */ })
     })
-    .catch(function(err) { if (!matched) showError(String(err)) })
+    .catch(function(err) {
+      seekState = "error"
+      if (!matched) showError("Recherche d'adversaire : " + String(err))
+    })
 
   // The account event stream: this is what actually tells us a game
   // started, and which one.
@@ -228,16 +249,22 @@ function humanFlow(params) {
   })
     .then(function(res) {
       if (!res.ok) {
-        if (!matched) showError("Impossible d'ouvrir le flux d'évènements (HTTP " + res.status + ").")
+        eventState = "error"
+        if (!matched) showError("Flux d'évènements refusé (HTTP " + res.status + "). Vérifie que le token a bien le scope board:play.")
         return
       }
+      eventState = "open"
+      refreshStatus()
       return pumpLines(res, function(line) {
         var evt
         try { evt = JSON.parse(line) } catch (e) { return }
         if (evt.type === "gameStart" && evt.game && evt.game.id) onMatched(evt.game.id)
       })
     })
-    .catch(function(err) { if (!matched) showError(String(err)) })
+    .catch(function(err) {
+      eventState = "error"
+      if (!matched) showError("Flux d'évènements : " + String(err))
+    })
 }
 
 var params = readParams()
