@@ -31,6 +31,13 @@ BarWidget {
   // keeps its state (~/.local/state/omarchy/*.json).
   readonly property string settingsPath: Quickshell.env("HOME") + "/.local/state/omarchy/lichess-bot-settings.json"
 
+  // A dedicated, persistent browser profile for this plugin — deliberately
+  // NOT the user's regular Brave profile, and NOT a fresh throwaway one
+  // either (that was the previous approach; see startGame() for why that
+  // broke actually playing the game). Chromium creates this directory on
+  // first use.
+  readonly property string chromeProfileDir: Quickshell.env("HOME") + "/.local/state/omarchy/lichess-bot-chrome-profile"
+
   FileView {
     id: settingsFile
     path: root.settingsPath
@@ -231,36 +238,86 @@ BarWidget {
     var pagePath = Qt.resolvedUrl("webapp/launch.html").toString()
     var url = pagePath + "#" + parts.join("&")
 
-    // A fresh --user-data-dir every launch forces a genuinely new,
-    // isolated Chromium instance instead of one that can get treated as
-    // "already running" and just focused without reloading — observed
-    // as "Opening in existing browser session" in the shell's log, which
-    // showed whatever mode/params an earlier launch had loaded instead
-    // of the current one. No persistent profile is needed here anyway:
-    // every request carries its own Authorization header, nothing relies
-    // on cookies or history surviving between launches.
-    var profileDir = "/tmp/omarchy-lichess-bot-" + Date.now()
-    launcherProc.profileDir = profileDir
-    launcherProc.command = [
-      "brave", "--app=" + url, "--window-size=520,440",
-      "--user-data-dir=" + profileDir, "--no-first-run"
-    ]
-    launcherProc.running = true
+    // root.chromeProfileDir is the SAME directory every launch, needed so
+    // the login session (see chromeProfileDir's own comment) survives
+    // between games. The catch, confirmed by testing directly: if an
+    // earlier game's window is still open, Brave's singleton (scoped per
+    // --user-data-dir) doesn't open a second window for that profile at
+    // all — it just prints "Opening in existing browser session" and
+    // does nothing, leaving the OLD window (old game, old mode/color)
+    // sitting there looking like the new launch did the wrong thing.
+    // Killing whatever's still running for this profile first guarantees
+    // a real new window; the login session is unaffected because it's
+    // saved to disk in that profile directory, not held in memory.
+    launchDelay.pendingUrl = url
+    // Killing with pkill (SIGTERM) doesn't give Brave a chance to shut
+    // down cleanly, which turned out to matter for two separate reasons,
+    // confirmed by testing directly:
+    //  1. It can leave a stale SingletonLock (plus Cookie/Socket) behind
+    //     pointing at a PID that no longer exists — Brave then sees the
+    //     lock, assumes another instance owns the profile, and silently
+    //     refuses to start at all (no window, no error).
+    //  2. An unclean shutdown makes Brave treat its NEXT launch as a
+    //     crash recovery: it restores whatever tabs were open before —
+    //     confirmed by watching it happen live, and the restored tabs
+    //     kept accumulating across launches (three at once after a few
+    //     kills) — which fully overrides the fresh URL this launch is
+    //     trying to open. That's what made it look like mode selection
+    //     or color wasn't taking effect: the window was never actually
+    //     showing this launch's page at all.
+    // Removing the lock files AND the session/tab-restore state — both
+    // right after the kill and again right before the actual launch —
+    // means neither a stale lock nor a restored-tab window can happen,
+    // whatever state Brave's own unclean-shutdown handling left behind.
+    //
+    // Values are passed as environment variables rather than concatenated
+    // into the shell script string (same pattern as TokenCheck.qml) —
+    // the URL fragment carries the API token, and encodeURIComponent
+    // doesn't escape every shell metacharacter (a literal single quote,
+    // for instance), so building the script text by string-concatenating
+    // it in directly would be a command-injection risk.
+    killPrevProc.exec({
+      command: ["sh", "-c",
+        "pkill -f \"user-data-dir=$LB_PROFILE\"; " +
+        "rm -f \"$LB_PROFILE/SingletonLock\" \"$LB_PROFILE/SingletonCookie\" \"$LB_PROFILE/SingletonSocket\"; " +
+        "rm -rf \"$LB_PROFILE/Default/Sessions\" \"$LB_PROFILE/Default/Session Storage\" " +
+        "\"$LB_PROFILE/Default/Current Session\" \"$LB_PROFILE/Default/Current Tabs\" " +
+        "\"$LB_PROFILE/Default/Last Session\" \"$LB_PROFILE/Default/Last Tabs\" " +
+        "\"$LB_PROFILE/Default/Tab Storage\""],
+      environment: { LB_PROFILE: root.chromeProfileDir }
+    })
   }
 
   Process {
-    id: launcherProc
-    property string profileDir: ""
-    onExited: function(exitCode, exitStatus) {
-      if (profileDir) cleanupProc.command = ["rm", "-rf", profileDir]
-      if (profileDir) cleanupProc.running = true
+    id: killPrevProc
+    onExited: launchDelay.restart()
+  }
+
+  Timer {
+    id: launchDelay
+    property string pendingUrl: ""
+    interval: 300
+    onTriggered: {
+      // rm runs synchronously before exec hands this same process over
+      // to brave, so the lock and session-restore files are guaranteed
+      // gone before Brave's own startup logic runs — a separate,
+      // independently-scheduled cleanup Process racing against the
+      // launch wouldn't guarantee that ordering. See killPrevProc's
+      // comment for why both of these need clearing every launch.
+      launcherProc.exec({
+        command: ["sh", "-c",
+          "rm -f \"$LB_PROFILE/SingletonLock\" \"$LB_PROFILE/SingletonCookie\" \"$LB_PROFILE/SingletonSocket\"; " +
+          "rm -rf \"$LB_PROFILE/Default/Sessions\" \"$LB_PROFILE/Default/Session Storage\" " +
+          "\"$LB_PROFILE/Default/Current Session\" \"$LB_PROFILE/Default/Current Tabs\" " +
+          "\"$LB_PROFILE/Default/Last Session\" \"$LB_PROFILE/Default/Last Tabs\" " +
+          "\"$LB_PROFILE/Default/Tab Storage\"; " +
+          "exec brave --app=\"$LB_URL\" --window-size=900,820 --user-data-dir=\"$LB_PROFILE\" --no-first-run"],
+        environment: { LB_URL: launchDelay.pendingUrl, LB_PROFILE: root.chromeProfileDir }
+      })
     }
   }
 
-  // Fire-and-forget removal of a closed window's temporary profile dir —
-  // separate from launcherProc since that Process object is about to be
-  // reused for the next launch by the time this runs.
-  Process { id: cleanupProc }
+  Process { id: launcherProc }
 
   Component.onCompleted: {
     if (root.draftToken.trim().length > 0) tokenCheckDebounce.restart()

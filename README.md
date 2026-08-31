@@ -54,6 +54,10 @@ puis redirige directement dessus.
 - Un navigateur basé sur Chromium installé (`brave` par défaut — change
   `launcherProc.command` dans `BarWidget.qml` si tu utilises un autre
   navigateur compatible `--app=`).
+- **Au tout premier lancement**, la fenêtre de jeu va s'ouvrir déconnectée
+  de Lichess : connecte-toi à ton compte Lichess dans cette fenêtre-là une
+  fois (voir Sécurité pour pourquoi). Elle reste connectée pour tous les
+  lancements suivants.
 
 ## Installation
 
@@ -92,6 +96,14 @@ Ou supprime directement `~/.config/omarchy/plugins/lichess-bot`.
   temps du lancement, et dans l'historique du navigateur. Sur une machine
   mono-utilisateur (le cas d'un poste Hyprland/Omarchy personnel),
   l'exposition est nulle ; sur une machine partagée, garde ça en tête.
+- La fenêtre de jeu s'ouvre dans un profil Chromium dédié à ce plugin
+  (`~/.local/state/omarchy/lichess-bot-chrome-profile`), séparé de ton
+  profil Brave habituel — mais **persistant** d'un lancement à l'autre
+  (contrairement à un profil jetable recréé à chaque fois), pour que la
+  session de connexion Lichess survive entre deux parties. C'est ce
+  profil-là qui te connecte réellement à la vraie page lichess.org
+  affichée dans la fenêtre — indépendamment du token API utilisé pour
+  créer la partie.
 
 ## Limites
 

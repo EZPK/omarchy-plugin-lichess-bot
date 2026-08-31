@@ -53,7 +53,6 @@
   <div class="spinner" id="spinner"></div>
   <div id="status">Création de la partie…</div>
   <div class="error" id="error" style="display:none"></div>
-  <div id="debugParams" style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.5;margin-top:14px;word-break:break-all;"></div>
   <button id="closeBtn" style="display:none" onclick="window.close()">Fermer</button>
 </div>
 <script>
@@ -153,7 +152,7 @@ function aiFlow(params) {
 // "Invalid time control" even in an otherwise-minimal seek request; the
 // settings panel only offers those two cadences for these modes. ----
 function humanFlow(params) {
-  showStatus("Recherche d'un adversaire de ton niveau…")
+  showStatus("Vérification des parties en cours…")
 
   var matched = false
   var stopped = false
@@ -161,9 +160,7 @@ function humanFlow(params) {
   var eventAbort = new AbortController()
 
   var giveUpAfterMs = 5 * 60 * 1000
-  var giveUpTimer = setTimeout(function() {
-    if (!matched) fail("Personne n'a été trouvé après 5 minutes. Réessaie plus tard, ou élargis la cadence.")
-  }, giveUpAfterMs)
+  var giveUpTimer = null
 
   // Single failure path for both legs: whichever one breaks, the other
   // is aborted too, so a working seek never keeps running unmonitored
@@ -239,67 +236,92 @@ function humanFlow(params) {
     }
   }
 
-  // The seek itself: stays open, sends periodic empty lines, and closes
-  // with no data once paired. We don't need anything it sends — just
-  // keep reading so the connection (and therefore the seek) stays alive
-  // until matched or this page goes away.
-  fetch("https://lichess.org/api/board/seek", {
-    method: "POST",
-    headers: {
-      "Authorization": "Bearer " + params.token,
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: seekBody.toString(),
-    signal: seekAbort.signal
+  // GET /api/stream/event immediately emits a "gameStart" event for
+  // EVERY game already in progress on the account, not just new ones —
+  // confirmed directly by connecting to it. Without this check, the
+  // first such event (any ongoing game — an old AI game, an unrelated
+  // one from browsing lichess.org normally, anything) got treated as
+  // "found an opponent" and redirected there, before the real seek had
+  // any chance to match. Recording which games already exist before
+  // opening the seek, and ignoring gameStart events for those specific
+  // ids, means only a genuinely new game (the one this seek creates) can
+  // trigger the redirect.
+  fetch("https://lichess.org/api/account/playing", {
+    headers: { "Authorization": "Bearer " + params.token }
   })
-    .then(function(res) {
-      if (!res.ok) {
-        return res.json().catch(function() { return null }).then(function(json) {
-          fail("Recherche d'adversaire refusée : " + errorDetail(json, res.status))
-        })
-      }
-      seekState = "open"
-      refreshStatus()
-      return pumpLines(res, function() { /* keep-alive lines, ignored */ })
-    })
-    .catch(function(err) {
-      if (err && err.name === "AbortError") return // our own cleanup, not a real failure
-      fail("Recherche d'adversaire : " + String(err))
+    .then(function(res) { return res.ok ? res.json() : { nowPlaying: [] } })
+    .catch(function() { return { nowPlaying: [] } })
+    .then(function(data) {
+      if (stopped) return
+      var preExisting = {}
+      ;(data.nowPlaying || []).forEach(function(g) { preExisting[g.gameId] = true })
+      startSearch(preExisting)
     })
 
-  // The account event stream: this is what actually tells us a game
-  // started, and which one.
-  fetch("https://lichess.org/api/stream/event", {
-    headers: { "Authorization": "Bearer " + params.token },
-    signal: eventAbort.signal
-  })
-    .then(function(res) {
-      if (!res.ok) {
-        fail("Flux d'évènements refusé (HTTP " + res.status + "). Vérifie que le token a bien le scope board:play — régénère-en un si besoin.")
-        return
-      }
-      eventState = "open"
-      refreshStatus()
-      return pumpLines(res, function(line) {
-        var evt
-        try { evt = JSON.parse(line) } catch (e) { return }
-        if (evt.type === "gameStart" && evt.game && evt.game.id) onMatched(evt.game.id)
+  function startSearch(preExisting) {
+    if (stopped) return
+    showStatus("Recherche d'un adversaire de ton niveau…")
+    giveUpTimer = setTimeout(function() {
+      if (!matched) fail("Personne n'a été trouvé après 5 minutes. Réessaie plus tard, ou élargis la cadence.")
+    }, giveUpAfterMs)
+
+    // The seek itself: stays open, sends periodic empty lines, and
+    // closes with no data once paired. We don't need anything it sends —
+    // just keep reading so the connection (and therefore the seek) stays
+    // alive until matched or this page goes away.
+    fetch("https://lichess.org/api/board/seek", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + params.token,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: seekBody.toString(),
+      signal: seekAbort.signal
+    })
+      .then(function(res) {
+        if (!res.ok) {
+          return res.json().catch(function() { return null }).then(function(json) {
+            fail("Recherche d'adversaire refusée : " + errorDetail(json, res.status))
+          })
+        }
+        seekState = "open"
+        refreshStatus()
+        return pumpLines(res, function() { /* keep-alive lines, ignored */ })
       })
+      .catch(function(err) {
+        if (err && err.name === "AbortError") return // our own cleanup, not a real failure
+        fail("Recherche d'adversaire : " + String(err))
+      })
+
+    // The account event stream: this is what actually tells us a game
+    // started, and which one.
+    fetch("https://lichess.org/api/stream/event", {
+      headers: { "Authorization": "Bearer " + params.token },
+      signal: eventAbort.signal
     })
-    .catch(function(err) {
-      if (err && err.name === "AbortError") return
-      fail("Flux d'évènements : " + String(err))
-    })
+      .then(function(res) {
+        if (!res.ok) {
+          fail("Flux d'évènements refusé (HTTP " + res.status + "). Vérifie que le token a bien le scope board:play — régénère-en un si besoin.")
+          return
+        }
+        eventState = "open"
+        refreshStatus()
+        return pumpLines(res, function(line) {
+          var evt
+          try { evt = JSON.parse(line) } catch (e) { return }
+          if (evt.type === "gameStart" && evt.game && evt.game.id && !preExisting[evt.game.id]) {
+            onMatched(evt.game.id)
+          }
+        })
+      })
+      .catch(function(err) {
+        if (err && err.name === "AbortError") return
+        fail("Flux d'évènements : " + String(err))
+      })
+  }
 }
 
 var params = readParams()
-
-// TEMP DEBUG: show exactly what this page parsed, right on the page
-// itself — no devtools needed to see which branch is about to run.
-// Token redacted since it's not relevant to this diagnostic.
-document.getElementById("debugParams").textContent =
-  "mode reçu : " + JSON.stringify(params.mode) +
-  " — hash brut : " + location.hash.replace(/token=[^&]*/, "token=<redacted>")
 
 if (!params.token) {
   showError("Aucun token fourni.")
